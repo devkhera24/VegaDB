@@ -1,0 +1,27 @@
+# VegaDBold - Requirements
+# Core web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+# Vector database & embeddings
+sentence-transformers>=2.2.2
+qdrant-client>=1.7.0
+
+# Data storage & serialization
+lmdb>=1.4.1
+msgpack>=1.0.7
+
+# NLP processing (for pipeline_ingest.py)
+spacy>=3.7.0
+
+# Utilities
+python-dateutil>=2.8.2
+orjson>=3.9.10  # optional, fast JSON
+
+# Testing
+pytest>=7.4.3
+requests>=2.31.0
+
+# HTTP client for tests
+httpx>=0.25.0

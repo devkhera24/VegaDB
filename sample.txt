@@ -1,0 +1,93 @@
+Sarah Chen — Machine Learning Engineer at Tesla
+Palo Alto, California, United States
+
+Professional Summary:
+Innovative machine learning engineer with 8+ years of experience building production-grade AI systems. Specialized in computer vision, natural language processing, and distributed training at scale. Led teams of 15+ engineers across three continents. Published 12 peer-reviewed papers in top-tier conferences including NeurIPS and ICML.
+
+Work Experience:
+
+Senior ML Engineer, Tesla Inc. (January 2021 - Present)
+• Architected the Autopilot vision system processing 2.5 million miles of driving data daily
+• Reduced inference latency by 40% through model optimization and quantization
+• Managed a team of 18 engineers across San Francisco, Austin, and Berlin
+• Deployed the first production transformer model achieving 99.2% accuracy on object detection
+• Budget managed: $3.5 million annually for compute infrastructure
+
+ML Research Scientist, Google Brain (June 2018 - December 2020)
+• Developed novel attention mechanisms improving BERT performance by 15%
+• Collaborated with 25+ researchers on the Meena conversational AI project
+• Published 7 papers including one Nature Machine Intelligence article
+• Presented at NeurIPS 2019 and CVPR 2020 conferences
+• Grant awarded: $500,000 for research on few-shot learning
+
+Data Scientist, Amazon Web Services (March 2015 - May 2018)
+• Built recommendation systems serving 100 million users daily
+• Improved click-through rate by 23% using deep learning models
+• Reduced training time from 72 hours to 8 hours through distributed computing
+• Mentored 5 junior data scientists
+
+Education:
+Ph.D. in Computer Science, Stanford University (2011-2015)
+Dissertation: "Efficient Deep Learning for Resource-Constrained Devices"
+Advisor: Professor Andrew Ng
+GPA: 3.95/4.0
+
+M.S. in Artificial Intelligence, MIT (2009-2011)
+Thesis: "Reinforcement Learning for Robotics"
+GPA: 3.87/4.0
+
+B.S. in Computer Engineering, UC Berkeley (2005-2009)
+Graduated Summa Cum Laude
+GPA: 3.92/4.0
+
+Technical Skills:
+Programming: Python, C++, Java, Go, JavaScript, SQL
+ML Frameworks: PyTorch, TensorFlow, JAX, Keras, Scikit-learn
+Cloud: AWS, Google Cloud Platform, Azure
+Tools: Docker, Kubernetes, Git, MLflow, Weights & Biases
+Specialties: Computer Vision, NLP, Reinforcement Learning, MLOps
+
+Publications:
+1. Chen, S. et al. (2023). "Efficient Transformers for Real-Time Video Processing." NeurIPS.
+2. Chen, S. & Zhang, L. (2022). "Self-Supervised Learning at Scale." ICML.
+3. Chen, S. (2021). "Quantization-Aware Training for Edge Devices." CVPR.
+4. Chen, S. et al. (2020). "Attention Mechanisms in Conversational AI." Nature Machine Intelligence.
+5. Chen, S. & Kumar, R. (2019). "Few-Shot Learning with Meta-Learning." NeurIPS.
+
+Awards & Recognition:
+• Forbes 30 Under 30 in Technology (2022)
+• Best Paper Award, NeurIPS (2023)
+• Google PhD Fellowship in Machine Learning (2013-2015)
+• Outstanding Graduate Student Award, Stanford (2014)
+
+Certifications:
+• AWS Certified Machine Learning – Specialty (2023)
+• Google Cloud Professional ML Engineer (2022)
+• Certified Kubernetes Administrator (2021)
+
+Languages:
+• English (Native)
+• Mandarin Chinese (Native)
+• Spanish (Conversational)
+
+Projects:
+OpenVision - Open-source computer vision library with 15,000+ GitHub stars
+Released in March 2022, used by 500+ companies worldwide
+
+AutoML Platform - Internal tool reducing model development time by 60%
+Deployed across 12 teams at Tesla, processing 10TB of data monthly
+
+Additional Information:
+Patent holder: 3 patents in machine learning optimization
+Speaking engagements: 25+ conference talks and keynotes
+Community: Organizer of Bay Area ML Meetup (2,500+ members)
+Mentorship: Advised 20+ startups through Y Combinator and Techstars
+
+References available upon request.
+
+Last updated: December 15, 2024
+Location: 1234 Innovation Drive, Palo Alto, CA 94301
+Email: sarah.chen@tesla.com
+Phone: +1 (650) 555-0123
+LinkedIn: linkedin.com/in/sarahchen
+GitHub: github.com/sarahchen

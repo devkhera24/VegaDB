@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""git push
+"""
 submit_and_query.py - Interactive document submission with structured JSON output
 """
 import sys
@@ -7,7 +7,7 @@ import json
 import requests
 from typing import Dict, Any
 
-API_BASE = "http://localhost:8000/api/v1"
+API_BASE = "http://localhost:8000"  # Fixed: removed /api/v1
 
 def read_multiline_input(prompt="Paste your text:\n"):
     print(prompt)
@@ -64,15 +64,14 @@ def main():
     print("STEP 1: CREATING NODE (INGESTION)")
     print("-" * 60)
     
-    # Create node via API
+    # Create node via API (using correct endpoint)
     try:
         response = requests.post(
             f"{API_BASE}/nodes",
             json={
                 "text": text,
-                "metadata": {"source": "cli_submission"},
-                "node_type": "document",
-                "title": "CLI Document"
+                "title": "CLI Document",
+                "metadata": {"source": "cli_submission"}
             }
         )
         response.raise_for_status()
@@ -81,10 +80,13 @@ def main():
         print("\n✓ NODE CREATED:")
         print(json.dumps(create_result, indent=2))
         
-        node_id = create_result["node"]["node_id"]
+        node_id = create_result["id"]  # Fixed: api_v2 returns "id", not "node.node_id"
         
     except Exception as e:
         print(f"\n✗ Node creation failed: {e}")
+        print(f"\nDebug info:")
+        print(f"  URL: {API_BASE}/nodes")
+        print(f"  Is server running? Check: {API_BASE}/health")
         sys.exit(1)
 
     print("\n" + "-" * 60)
@@ -121,8 +123,7 @@ def main():
                 "query_text": text[:200],
                 "top_k": 5,
                 "vector_weight": 0.7,
-                "graph_weight": 0.3,
-                "include_neighbors": True
+                "graph_weight": 0.3
             }
         )
         response.raise_for_status()
