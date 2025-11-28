@@ -1,250 +1,248 @@
-# pipeline_ingest.py
+#!/usr/bin/env python3
+"""
+pipeline_ingest.py - Complete ingestion with structured storage
+Extracts important info and stores in vector + graph DBs
+"""
 import uuid
+import spacy
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict
-import spacy
+from typing import List, Dict, Any
 from sentence_transformers import SentenceTransformer
 
-from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct, Distance, VectorParams
-
-from neo4j import GraphDatabase
-
-# =====================
-# CONFIG
-# =====================
-QDRANT_HOST = "localhost"
-QDRANT_PORT = 6333
-QDRANT_COLLECTION = "docs_chunks"
-
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "password"
-
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
-
-# =====================
-# LOAD MODELS
-# =====================
+# Load models
 nlp = spacy.load("en_core_web_sm", disable=["parser"])
-embed_model = SentenceTransformer(EMBED_MODEL)
+embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-# =====================
-# INIT QDRANT + NEO4J
-# =====================
-qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-
-# ===============================
-# SAFE QDRANT INIT (non-blocking)
-# ===============================
-QDRANT_AVAILABLE = True
-try:
-    # Check if Qdrant responds
-    qdrant.get_collections()
-
-    # Create collection only if missing
-    if not qdrant.collection_exists(QDRANT_COLLECTION):
-        qdrant.create_collection(
-            collection_name=QDRANT_COLLECTION,
-            vectors_config=VectorParams(
-                size=embed_model.get_sentence_embedding_dimension(),
-                distance=Distance.COSINE
-            ),
-        )
-except Exception as e:
-    print(f"[QDRANT WARNING] Qdrant is NOT reachable — skipping vector storage. ({e})")
-    QDRANT_AVAILABLE = False
-
-
-def store_to_qdrant(points):
-    if not QDRANT_AVAILABLE:
-        print("[QDRANT] Skipping upsert because Qdrant is not available.")
-        return
-    qdrant.upsert(collection_name=QDRANT_COLLECTION, points=points)
-
-
-neo_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-
-
-# =====================
-# HELPER FUNCTIONS
-# =====================
-def chunk_text(text: str, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP) -> List[Dict]:
+# ==================== CHUNKING ====================
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[Dict]:
+    """
+    Split text into overlapping chunks
+    Each chunk is a dict with: {chunk_id, text, start_char, end_char}
+    """
     chunks = []
     i = 0
-    L = len(text)
-    while i < L:
-        end = min(i + chunk_size, L)
-        chunk_txt = text[i:end]
-        chunk_id = str(uuid.uuid4())
-        chunks.append({
-            "chunk_id": chunk_id,
-            "text": chunk_txt,
-            "start_char": i,
-            "end_char": end
-        })
+    text_len = len(text)
+    
+    while i < text_len:
+        end = min(i + chunk_size, text_len)
+        chunk_text_content = text[i:end].strip()
+        
+        if chunk_text_content:
+            chunks.append({
+                "chunk_id": str(uuid.uuid4()),
+                "text": chunk_text_content,
+                "start_char": i,
+                "end_char": end
+            })
+        
         i = end - overlap
-        if i < 0:
-            i = 0
+        if i <= 0:
+            break
+    
     return chunks
 
-
-def extract_entities(text: str):
+# ==================== ENTITY EXTRACTION ====================
+def extract_entities(text: str) -> Dict[str, List[Dict]]:
+    """
+    Extract named entities (PERSON, ORG, GPE, DATE, etc.)
+    Returns: {"PERSON": [...], "ORG": [...], ...}
+    """
     doc = nlp(text)
-    return [
-        {
+    entities_by_type = {}
+    
+    for ent in doc.ents:
+        entity_dict = {
             "text": ent.text,
             "label": ent.label_,
             "start": ent.start_char,
             "end": ent.end_char
         }
-        for ent in doc.ents
-    ]
+        
+        if ent.label_ not in entities_by_type:
+            entities_by_type[ent.label_] = []
+        
+        entities_by_type[ent.label_].append(entity_dict)
+    
+    return entities_by_type
 
+# ==================== KEYWORD EXTRACTION ====================
+def extract_keywords(text: str) -> List[str]:
+    """
+    Extract important keywords (nouns, proper nouns)
+    """
+    doc = nlp(text)
+    keywords = []
+    
+    for token in doc:
+        if token.pos_ in ["NOUN", "PROPN"] and len(token.text) > 3:
+            keywords.append(token.text.lower())
+    
+    # Remove duplicates, keep top 10
+    keywords = list(set(keywords))[:10]
+    return keywords
 
-def embed_texts(texts: List[str]):
-    return embed_model.encode(texts, convert_to_numpy=True).tolist()
+# ==================== EMBEDDING GENERATION ====================
+def generate_embeddings(texts: List[str]) -> List[List[float]]:
+    """
+    Generate embeddings for list of texts
+    Returns: List of 384-dim vectors
+    """
+    embeddings = embed_model.encode(texts, convert_to_numpy=True)
+    return [emb.tolist() for emb in embeddings]
 
-
-def store_to_qdrant(points):
-    qdrant.upsert(collection_name=QDRANT_COLLECTION, points=points)
-
-
-def store_to_neo4j(doc_json: dict):
-    with neo_driver.session() as session:
-        session.write_transaction(_neo4j_tx, doc_json)
-
-
-def _neo4j_tx(tx, doc_json):
-    # create document node
-    tx.run(
-        """
-        MERGE (d:Document {doc_id:$doc_id})
-        SET d.title=$title, d.source=$source, d.meta=$meta, d.created_at=$created_at
-        """,
-        doc_id=doc_json["doc_id"],
-        title=doc_json.get("title"),
-        source=doc_json.get("source"),
-        meta=str(doc_json.get("meta", {})),
-        created_at=doc_json.get("created_at"),
-    )
-
-    # chunk nodes
-    for c in doc_json["chunks"]:
-        tx.run(
-            """
-            MERGE (c:Chunk {chunk_id:$cid})
-            SET c.text=$text, c.start_char=$start, c.end_char=$end, 
-                c.entities=$entities, c.keywords=$keywords
-            MERGE (d:Document {doc_id:$doc_id})-[:HAS_CHUNK]->(c)
-            """,
-            cid=c["chunk_id"],
-            text=c["text"],
-            start=c["start_char"],
-            end=c["end_char"],
-            entities=str(c.get("entities", [])),
-            keywords=str(c.get("keywords", [])),
-            doc_id=doc_json["doc_id"],
-        )
-
-
-# ============================
-# AUTO-SCHEMA IMPORT
-# ============================
-try:
-    from auto_schema import infer_schema_from_doc, register_schema
-except Exception:
-    infer_schema_from_doc = None
-    register_schema = None
-
-
-# =====================
-# MAIN INGEST FUNCTION
-# =====================
-def ingest_document_text(source: str, text: str, title: str = None, meta: dict = None):
-    doc_id = str(uuid.uuid4())
-    meta = meta or {}
-
-    # --------------------
-    # 1) CHUNKING
-    # --------------------
+# ==================== MAIN INGESTION FUNCTION ====================
+def ingest_file(file_path: str) -> Dict[str, Any]:
+    """
+    Complete ingestion pipeline:
+    1. Read file
+    2. Chunk text
+    3. Extract entities & keywords
+    4. Generate embeddings
+    5. Create structured document
+    6. Store in databases
+    
+    Returns: Structured document JSON
+    """
+    # Read file
+    text = Path(file_path).read_text(encoding='utf-8')
+    
+    # Generate document ID
+    doc_id = f"doc_{uuid.uuid4().hex[:8]}"
+    
+    # Chunk text
     chunks = chunk_text(text)
+    
+    # Extract entities from full text
+    entities = extract_entities(text)
+    
+    # Extract keywords from full text
+    keywords = extract_keywords(text)
+    
+    # Generate embeddings for each chunk
     chunk_texts = [c["text"] for c in chunks]
-
-    # --------------------
-    # 2) ENTITY EXTRACTION
-    # --------------------
-    for c in chunks:
-        c["entities"] = extract_entities(c["text"])
-        c["keywords"] = []     # optional: your keyword extractor later
-        c["relations"] = []    # optional: graph relations auto or manual
-
-    # --------------------
-    # 3) EMBEDDINGS
-    # --------------------
-    embeddings = embed_texts(chunk_texts)
-
-    # --------------------
-    # 4) BUILD DOC JSON
-    # --------------------
+    embeddings = generate_embeddings(chunk_texts)
+    
+    # Attach embeddings to chunks
+    for chunk, embedding in zip(chunks, embeddings):
+        chunk["embedding"] = embedding
+        chunk["entities"] = extract_entities(chunk["text"])
+        chunk["keywords"] = extract_keywords(chunk["text"])
+    
+    # Create structured document
     doc_json = {
         "doc_id": doc_id,
-        "source": source,
-        "title": title or source,
-        "meta": meta,
-        "chunks": [{k: v for k, v in c.items() if k != "embedding"} for c in chunks],
+        "source": file_path,
+        "title": Path(file_path).stem,  # filename without extension
         "created_at": datetime.utcnow().isoformat() + "Z",
+        "full_text": text,
+        "summary": text[:200] + "..." if len(text) > 200 else text,
+        "entities": entities,
+        "keywords": keywords,
+        "chunk_count": len(chunks),
+        "chunks": chunks
     }
+    
+    return doc_json
 
-    # --------------------
-    # 5) AUTO SCHEMA STEP
-    # --------------------
-    schema_fp = None
-    if infer_schema_from_doc and register_schema:
-        jschema, metadata = infer_schema_from_doc(doc_json)
-        schema_name = doc_json.get("source") or doc_json.get("title") or f"auto_{metadata.fingerprint}"
-        registered = register_schema(schema_name, jschema, metadata)
-        schema_fp = registered["meta"]["fingerprint"]
-        print(f"[SCHEMA] Registered {schema_name} -> fp={schema_fp}")
-
-    # --------------------
-    # 6) BUILD QDRANT POINTS (include schema_fp!)
-    # --------------------
-    qdrant_points = []
-    for c, emb in zip(chunks, embeddings):
-        payload = {
-            "doc_id": doc_id,
-            "text": c["text"],
+# ==================== STORAGE FUNCTIONS ====================
+def store_to_api(doc_json: Dict[str, Any], api_base: str = "http://localhost:8000"):
+    """
+    Store document via API
+    Creates one node per chunk for vector search
+    """
+    import requests
+    
+    # Store full document as a node
+    response = requests.post(
+        f"{api_base}/nodes",
+        json={
+            "id": doc_json["doc_id"],
+            "text": doc_json["full_text"],
+            "title": doc_json["title"],
+            "metadata": {
+                "source": doc_json["source"],
+                "entities": doc_json["entities"],
+                "keywords": doc_json["keywords"],
+                "chunk_count": doc_json["chunk_count"]
+            }
         }
-        if schema_fp:
-            payload["schema_fp"] = schema_fp
-
-        qdrant_points.append(
-            PointStruct(
-                id=c["chunk_id"],
-                vector=emb,
-                payload=payload,
-            )
+    )
+    
+    if response.status_code != 200:
+        print(f"Failed to create document node: {response.text}")
+        return
+    
+    print(f"✓ Created document: {doc_json['doc_id']}")
+    
+    # Store each chunk as a separate node
+    for i, chunk in enumerate(doc_json["chunks"]):
+        chunk_response = requests.post(
+            f"{api_base}/nodes",
+            json={
+                "id": chunk["chunk_id"],
+                "text": chunk["text"],
+                "title": f"{doc_json['title']} - Chunk {i+1}",
+                "embedding": chunk["embedding"],
+                "metadata": {
+                    "doc_id": doc_json["doc_id"],
+                    "chunk_index": i,
+                    "entities": chunk["entities"],
+                    "keywords": chunk["keywords"]
+                }
+            }
+        )
+        
+        if chunk_response.status_code == 200:
+            print(f"  ✓ Created chunk {i+1}/{len(doc_json['chunks'])}")
+        
+        # Create edge: document -> chunk
+        requests.post(
+            f"{api_base}/edges",
+            json={
+                "source": doc_json["doc_id"],
+                "target": chunk["chunk_id"],
+                "type": "HAS_CHUNK",
+                "weight": 1.0
+            }
         )
 
-    # --------------------
-    # 7) UPSERT + GRAPH SAVE
-    # --------------------
-    store_to_qdrant(qdrant_points)
-    store_to_neo4j(doc_json)
-
-    return doc_id
-
-
-# =====================
-# CLI USAGE
-# =====================
+# ==================== CLI ====================
 if __name__ == "__main__":
     import sys
-    p = sys.argv[1]
-    txt = Path(p).read_text()
-    doc_id = ingest_document_text(source=p, text=txt, title=Path(p).name)
-    print("Ingested doc:", doc_id)
+    
+    if len(sys.argv) < 2:
+        print("Usage: python pipeline_ingest.py <file_path>")
+        sys.exit(1)
+    
+    file_path = sys.argv[1]
+    
+    print("="*70)
+    print(f"  INGESTING: {file_path}")
+    print("="*70)
+    print()
+    
+    # Ingest file
+    doc_json = ingest_file(file_path)
+    
+    # Print structured output
+    print("\n📄 STRUCTURED DOCUMENT:")
+    print(f"  Doc ID: {doc_json['doc_id']}")
+    print(f"  Title: {doc_json['title']}")
+    print(f"  Chunks: {doc_json['chunk_count']}")
+    print(f"  Keywords: {', '.join(doc_json['keywords'][:5])}")
+    print(f"  Entities: {sum(len(v) for v in doc_json['entities'].values())} found")
+    print()
+    
+    # Store to API
+    print("💾 STORING TO DATABASE...")
+    store_to_api(doc_json)
+    
+    print()
+    print("="*70)
+    print("  ✅ INGESTION COMPLETE")
+    print("="*70)
+    print()
+    print(f"Test queries:")
+    print(f'  POST /search/vector: {{"query_text": "caching strategies", "top_k": 5}}')
+    print(f'  GET  /search/graph?start_id={doc_json["doc_id"]}&depth=1')
